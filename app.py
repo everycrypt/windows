@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-EveryCrypt — защищённое файловое хранилище
-Material Design 3 + Flask + PyWebView
-Версия 2.1 — с защитой от локального MITM
-"""
 
 import os, sys, json, secrets, hashlib, logging, base64, time, threading, mimetypes, re
 from pathlib import Path
