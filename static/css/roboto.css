@@ -1,0 +1,40 @@
+/* roboto-300 - cyrillic_cyrillic-ext_latin */
+@font-face {
+  font-display: swap;
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 300;
+  src: url('/static/fonts/roboto/roboto-v51-cyrillic_cyrillic-ext_latin-300.woff2') format('woff2');
+}
+
+/* roboto-regular (400) - cyrillic_cyrillic-ext_latin */
+@font-face {
+  font-display: swap;
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 400;
+  src: url('/static/fonts/roboto/roboto-v51-cyrillic_cyrillic-ext_latin-regular.woff2') format('woff2');
+}
+
+/* roboto-500 - cyrillic_cyrillic-ext_latin */
+@font-face {
+  font-display: swap;
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 500;
+  src: url('/static/fonts/roboto/roboto-v51-cyrillic_cyrillic-ext_latin-500.woff2') format('woff2');
+}
+
+/* roboto-700 - cyrillic_cyrillic-ext_latin */
+@font-face {
+  font-display: swap;
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 700;
+  src: url('/static/fonts/roboto/roboto-v51-cyrillic_cyrillic-ext_latin-700.woff2') format('woff2');
+}
+
+/* Применяем шрифт ко всему приложению */
+body {
+  font-family: 'Roboto', sans-serif;
+}

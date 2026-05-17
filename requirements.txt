@@ -1,0 +1,7 @@
+flask>=2.0
+argon2-cffi>=21.0
+cryptography>=41.0
+pillow>=10.0
+pywebview>=5.0
+
+# pip install flask argon2-cffi cryptography pillow pywebview
