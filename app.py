@@ -421,8 +421,41 @@ function showToast(m,i){var t=document.createElement('div');t.className='toast';
 function closeDialog(){var c=document.getElementById('dialog-container');if(c)c.innerHTML='';}
 function resetInactivityTimer(){if(STATE.locked)return;var d=document.getElementById('dialog-container');if(d&&d.innerHTML.replace(/\s/g,'')!=='')return;clearTimeout(STATE.inactivityTimer);var t=STATE.lockTimeout||25;if(t>0)STATE.inactivityTimer=setTimeout(lockVault,t*1000);}
 function lockVault(){if(!STATE.sessionToken||STATE.view!=='browser')return;var d=document.getElementById('dialog-container');if(d&&d.innerHTML.replace(/\s/g,'')!=='')return;STATE.locked=true;document.getElementById('lock-screen').innerHTML='<div class="lock-overlay"><div class="lock-dialog"><span class="material-symbols-rounded lock-icon">lock</span><div style="font-size:20px;margin-bottom:8px;">Хранилище заблокировано</div><div style="color:var(--md-on-surface-variant);margin-bottom:24px;">Неактивность</div><form onsubmit="unlockVault(event);return false"><div class="input-field"><label class="input-label">Пароль</label><input class="input-text" type="password" id="unlock-password" placeholder="Введите пароль" required autofocus></div><div class="dialog-actions"><button type="submit" class="btn btn-filled"><span class="material-symbols-rounded" style="font-size:18px;">lock_open</span>Разблокировать</button></div></form></div></div>';clearTimeout(STATE.inactivityTimer);setTimeout(function(){var el=document.getElementById('unlock-password');if(el)el.focus();},100);}
-function unlockVault(e){if(e)e.preventDefault();var pw=document.getElementById('unlock-password').value;if(!pw)return;api('open_vault',{vault_id:STATE.currentVault.id,password:pw},function(r){if(r.success){STATE.locked=false;STATE.sessionToken=r.session;document.getElementById('lock-screen').innerHTML='';resetInactivityTimer();showToast('Разблокировано','lock_open');}else{showToast('Неверный пароль','error');var el=document.getElementById('unlock-password');if(el){el.value='';el.focus();}}});}
-
+function unlockVault(e){
+    if(e)e.preventDefault();
+    var btn=document.querySelector('#lock-screen .btn-filled');
+    if(btn&&btn.disabled)return; // Кнопка заблокирована
+    
+    var pw=document.getElementById('unlock-password').value;
+    if(!pw)return;
+    
+    // Блокируем кнопку на время запроса
+    if(btn){btn.disabled=true;btn.textContent='...';}
+    
+    api('open_vault',{vault_id:STATE.currentVault.id,password:pw},function(r){
+        if(r.success){
+            STATE.locked=false;
+            STATE.sessionToken=r.session;
+            document.getElementById('lock-screen').innerHTML='';
+            resetInactivityTimer();
+            showToast('Разблокировано','lock_open');
+        }else{
+            showToast(r.error||'Неверный пароль','error');
+            var el=document.getElementById('unlock-password');
+            if(el){el.value='';el.focus();}
+            
+            // Извлекаем секунды из сообщения об ошибке
+            var msg=r.error||'';
+            var match=msg.match(/(\d+)\s*сек/);
+            if(match){
+                var seconds=parseInt(match[1]);
+                lockButton(document.querySelector('#lock-screen .btn-filled'),seconds);
+            }else{
+                if(btn){btn.disabled=false;btn.textContent='Разблокировать';}
+            }
+        }
+    });
+}
 function api(method,data,callback){var x=new XMLHttpRequest();x.open('POST','/api/'+method,true);x.setRequestHeader('Content-Type','application/json');x.setRequestHeader('X-EveryCrypt-Token',APP_TOKEN);x.onload=function(){try{callback(JSON.parse(x.responseText));}catch(e){callback({success:false,error:'Ошибка ответа'});}};x.onerror=function(){callback({success:false,error:'Нет соединения'});};x.send(JSON.stringify(data||{}));}
 function uploadFile(file,callback){var fd=new FormData();fd.append('file',file);fd.append('vault_id',STATE.currentVault.id);fd.append('session',STATE.sessionToken);fd.append('path',STATE.currentPath);var x=new XMLHttpRequest();x.open('POST','/api/upload_file',true);x.setRequestHeader('X-EveryCrypt-Token',APP_TOKEN);x.onload=function(){try{callback(JSON.parse(x.responseText));}catch(e){callback({success:false});}};x.onerror=function(){callback({success:false});};x.send(fd);}
 function isImageFile(name){var ext=name.split('.').pop().toLowerCase();return['jpg','jpeg','png','gif','webp','bmp'].indexOf(ext)!==-1;}
@@ -517,8 +550,62 @@ function showCreateVaultDialog(){document.getElementById('dialog-container').inn
 function createVaultForm(e){e.preventDefault();var n=document.getElementById('vault-name-dialog').value.trim(),p=document.getElementById('vault-password-dialog').value,enc=document.getElementById('vault-encrypt-name').checked;if(!n||!p){showToast('Заполните все поля','error');return;}if(p.length<8){showToast('Пароль минимум 8 символов','error');return;}api('create_vault',{name:n,password:p,encrypt_name:enc},function(r){if(r.success){closeDialog();loadVaults();showToast('Хранилище создано','check_circle');}else showToast(r.error||'Ошибка','error');});}
 
 function openVaultDialog(id){document.getElementById('dialog-container').innerHTML='<div class="dialog-overlay" onclick="if(event.target===this)closeDialog()"><div class="dialog" onclick="event.stopPropagation()"><div class="dialog-title">Открыть хранилище</div><form onsubmit="openVaultSubmit(event,\''+id+'\');return false"><div class="input-field"><label class="input-label">Пароль</label><input class="input-text" type="password" id="vault-open-password" placeholder="Введите пароль" required autofocus></div><div class="dialog-actions"><button type="button" class="btn btn-outlined" onclick="closeDialog()">Отмена</button><button type="submit" class="btn btn-filled"><span class="material-symbols-rounded" style="font-size:18px;">lock_open</span>Открыть</button></div></form></div></div>';setTimeout(function(){var el=document.getElementById('vault-open-password');if(el)el.focus();},100);}
-function openVaultSubmit(e,id){e.preventDefault();var pw=document.getElementById('vault-open-password').value;if(!pw)return;api('open_vault',{vault_id:id,password:pw},function(r){if(r.success){closeDialog();STATE.view='browser';STATE.currentVault={id:id,name:r.name};STATE.currentPath='/';STATE.sessionToken=r.session;STATE.locked=false;STATE.viewMode='list';renderBrowser();resetInactivityTimer();showToast('Хранилище открыто','lock_open');}else{showToast('Неверный пароль','error');var el=document.getElementById('vault-open-password');if(el){el.value='';el.focus();}}});}
-
+function openVaultSubmit(e,id){
+    e.preventDefault();
+    var btn=document.querySelector('#dialog-container .btn-filled');
+    if(btn&&btn.disabled)return;
+    
+    var pw=document.getElementById('vault-open-password').value;
+    if(!pw)return;
+    
+    if(btn){btn.disabled=true;btn.textContent='...';}
+    
+    api('open_vault',{vault_id:id,password:pw},function(r){
+        if(r.success){
+            closeDialog();
+            STATE.view='browser';
+            STATE.currentVault={id:id,name:r.name};
+            STATE.currentPath='/';
+            STATE.sessionToken=r.session;
+            STATE.locked=false;
+            STATE.viewMode='list';
+            renderBrowser();
+            resetInactivityTimer();
+            showToast('Хранилище открыто','lock_open');
+        }else{
+            showToast(r.error||'Неверный пароль','error');
+            var el=document.getElementById('vault-open-password');
+            if(el){el.value='';el.focus();}
+            
+            var msg=r.error||'';
+            var match=msg.match(/(\d+)\s*сек/);
+            if(match){
+                var seconds=parseInt(match[1]);
+                lockButton(document.querySelector('#dialog-container .btn-filled'),seconds);
+            }else{
+                if(btn){btn.disabled=false;btn.textContent='Открыть';}
+            }
+        }
+    });
+}
+function lockButton(btn,seconds){
+    if(!btn)return;
+    btn.disabled=true;
+    btn.style.opacity='0.5';
+    
+    function update(){
+        if(seconds<=0){
+            btn.disabled=false;
+            btn.style.opacity='1';
+            btn.textContent=btn.closest('#lock-screen')?'Разблокировать':'Открыть';
+            return;
+        }
+        btn.textContent='Ждите '+seconds+' сек';
+        seconds--;
+        setTimeout(update,1000);
+    }
+    update();
+}
 function showCreateFolderDialog(){resetInactivityTimer();document.getElementById('dialog-container').innerHTML='<div class="dialog-overlay" onclick="if(event.target===this)closeDialog()"><div class="dialog" onclick="event.stopPropagation()"><div class="dialog-title">Новая папка</div><form onsubmit="createFolderForm(event);return false"><div class="input-field"><label class="input-label">Название</label><input class="input-text" type="text" id="folder-name-input" placeholder="Название папки" required autofocus></div><div class="dialog-actions"><button type="button" class="btn btn-outlined" onclick="closeDialog()">Отмена</button><button type="submit" class="btn btn-filled">Создать</button></div></form></div></div>';}
 function createFolderForm(e){e.preventDefault();resetInactivityTimer();var name=document.getElementById('folder-name-input').value.trim();if(!name||name.indexOf('/')!==-1)return;api('create_folder',{vault_id:STATE.currentVault.id,session:STATE.sessionToken,path:STATE.currentPath,name:name},function(r){if(r.success){closeDialog();loadFiles();showToast('Папка создана','check_circle');}else showToast(r.error||'Ошибка','error');});}
 
@@ -744,44 +831,175 @@ def handle_list_vaults(data=None):
     vaults.sort(key=lambda x: x['created_at'], reverse=True)
     return jsonify({'success': True, 'vaults': vaults})
 
+
+# ─── Защита от брутфорса (сохранение попыток) ────
+
+LOGIN_ATTEMPTS_FILE = BASE_DIR / "login_attempts.json"
+LOGIN_FILE_KEY = None
+
+def load_login_attempts() -> dict:
+    """Загружает попытки входа из защищённого файла"""
+    global LOGIN_FILE_KEY
+    if LOGIN_FILE_KEY is None:
+        key_file = BASE_DIR / "login_attempts.key"
+        if key_file.exists():
+            LOGIN_FILE_KEY = key_file.read_bytes()
+        else:
+            LOGIN_FILE_KEY = secrets.token_bytes(32)
+            key_file.write_bytes(LOGIN_FILE_KEY)
+    
+    if LOGIN_ATTEMPTS_FILE.exists():
+        try:
+            encrypted = LOGIN_ATTEMPTS_FILE.read_bytes()
+            decrypted = decrypt_data(encrypted, LOGIN_FILE_KEY)
+            return json.loads(decrypted.decode('utf-8'))
+        except:
+            pass
+    return {}
+
+def save_login_attempts(attempts: dict):
+    """Сохраняет попытки входа в защищённый файл"""
+    global LOGIN_FILE_KEY
+    if LOGIN_FILE_KEY is None:
+        key_file = BASE_DIR / "login_attempts.key"
+        if key_file.exists():
+            LOGIN_FILE_KEY = key_file.read_bytes()
+        else:
+            LOGIN_FILE_KEY = secrets.token_bytes(32)
+            key_file.write_bytes(LOGIN_FILE_KEY)
+    
+    encrypted = encrypt_data(json.dumps(attempts).encode('utf-8'), LOGIN_FILE_KEY)
+    LOGIN_ATTEMPTS_FILE.write_bytes(encrypted)
+
+# fixed 
+
+
 def handle_open_vault(data):
-    vid = data.get('vault_id'); pw = data.get('password', ''); client_ip = request.remote_addr
-    if not vid or not pw: return jsonify({'success': False, 'error': 'Введите пароль'})
+    vid = data.get('vault_id')
+    pw = data.get('password', '')
+    client_ip = request.remote_addr
+    
+    if not vid or not pw:
+        return jsonify({'success': False, 'error': 'Введите пароль'})
+    
     now = time.time()
-    if client_ip in login_attempts:
-        attempts = login_attempts[client_ip]['count']
-        last = login_attempts[client_ip]['last_attempt']
-        delays = {4: 5, 5: 30, 6: 300, 7: 900, 8: 10800, 9: 10800, 10: 10800}
-        if attempts >= 4 and attempts <= 10:
-            delay = delays.get(attempts, 10800)
-            if now - last < delay:
-                remaining = int(delay - (now - last))
-                return jsonify({'success': False, 'error': f'Слишком много попыток. Подождите {format_delay(remaining)}.'})
-        if attempts > 10:
-            return jsonify({'success': False, 'error': 'Доступ заблокирован. Перезапустите приложение.'})
-    try:
-        pepper = load_or_create_pepper(); v = open_vault(vid, pw, pepper)
-        if not v:
-            if client_ip not in login_attempts:
-                login_attempts[client_ip] = {'count': 0, 'last_attempt': 0}
-            login_attempts[client_ip]['count'] += 1
-            login_attempts[client_ip]['last_attempt'] = now
-            remaining = max(0, 3 - login_attempts[client_ip]['count'])
-            msg = 'Неверный пароль.'
-            if remaining > 0: msg += f' Осталось попыток: {remaining}'
-            elif login_attempts[client_ip]['count'] <= 10:
-                delays = {4: 5, 5: 30, 6: 300, 7: 900, 8: 10800, 9: 10800, 10: 10800}
-                delay = delays.get(login_attempts[client_ip]['count'], 10800)
-                msg += f' Следующая попытка через {format_delay(delay)}.'
-            else: msg = 'Доступ заблокирован.'
+    attempt_key = f"{client_ip}:{vid}"
+    attempts_file = BASE_DIR / "brute_force_protection.dat"
+    key_file = BASE_DIR / "brute_force.key"
+    
+    # Ключ для шифрования попыток
+    if key_file.exists():
+        key = key_file.read_bytes()
+    else:
+        key = secrets.token_bytes(32)
+        key_file.write_bytes(key)
+    
+    # Загружаем попытки
+    saved = {}
+    if attempts_file.exists():
+        try:
+            decrypted = decrypt_data(attempts_file.read_bytes(), key)
+            saved = json.loads(decrypted.decode('utf-8'))
+        except:
+            pass
+    
+    # Проверяем блокировку
+    if attempt_key in saved:
+        ad = saved[attempt_key]
+        count = ad.get('c', 0)
+        last = ad.get('t', 0)
+        blocked = ad.get('b', 0)
+        
+        # Заблокирован?
+        if blocked > now:
+            remaining = int(blocked - now)
+            hours = remaining // 3600
+            mins = (remaining % 3600) // 60
+            secs = remaining % 60
+            if hours > 0:
+                msg = f'Доступ заблокирован на {hours} ч {mins} мин.'
+            elif mins > 0:
+                msg = f'Доступ заблокирован на {mins} мин {secs} сек.'
+            else:
+                msg = f'Доступ заблокирован на {secs} сек.'
             return jsonify({'success': False, 'error': msg})
-        login_attempts.pop(client_ip, None)
+        
+        # Задержка?
+        delays = {3: 5, 4: 30, 5: 300, 6: 900, 7: 3600, 8: 10800, 9: 86400}
+        if count >= 3:
+            delay = delays.get(count, 86400)
+            elapsed = now - last
+            if elapsed < delay:
+                remaining = int(delay - elapsed)
+                # РЕАЛЬНАЯ ЗАДЕРЖКА
+                time.sleep(min(remaining, 10))  # Максимум 10 сек ожидания
+                if remaining >= 3600:
+                    msg = f'Подождите {remaining//3600} ч {(remaining%3600)//60} мин.'
+                elif remaining >= 60:
+                    msg = f'Подождите {remaining//60} мин {remaining%60} сек.'
+                else:
+                    msg = f'Подождите {remaining} сек.'
+                return jsonify({'success': False, 'error': msg})
+    
+    try:
+        pepper = load_or_create_pepper()
+        vault = open_vault(vid, pw, pepper)
+        
+        if not vault:
+            if attempt_key not in saved:
+                saved[attempt_key] = {'c': 0, 't': 0, 'b': 0}
+            
+            saved[attempt_key]['c'] += 1
+            saved[attempt_key]['t'] = now
+            count = saved[attempt_key]['c']
+            
+            # Блокировка после 10 попыток
+            if count >= 10:
+                saved[attempt_key]['b'] = now + 86400
+                attempts_file.write_bytes(encrypt_data(json.dumps(saved).encode(), key))
+                return jsonify({'success': False, 'error': '10 неверных попыток. Доступ заблокирован на 24 часа.'})
+            
+            # Сохраняем
+            attempts_file.write_bytes(encrypt_data(json.dumps(saved).encode(), key))
+            
+            # Сообщения
+            if count <= 3:
+                return jsonify({'success': False, 'error': f'Неверный пароль. Осталось попыток: {3-count}'})
+            elif count == 4:
+                return jsonify({'success': False, 'error': 'Неверный пароль. Ждите 5 сек.'})
+            elif count == 5:
+                return jsonify({'success': False, 'error': 'Неверный пароль. Ждите 30 сек.'})
+            elif count == 6:
+                return jsonify({'success': False, 'error': 'Неверный пароль. Ждите 5 мин.'})
+            elif count == 7:
+                return jsonify({'success': False, 'error': 'Неверный пароль. Ждите 15 мин.'})
+            elif count == 8:
+                return jsonify({'success': False, 'error': 'Неверный пароль. Ждите 1 час.'})
+            elif count == 9:
+                return jsonify({'success': False, 'error': 'ПОСЛЕДНЯЯ попытка! Ждите 3 часа.'})
+            else:
+                return jsonify({'success': False, 'error': f'Неверный пароль. Попытка {count}.'})
+        
+        # Успех
+        if attempt_key in saved:
+            del saved[attempt_key]
+            attempts_file.write_bytes(encrypt_data(json.dumps(saved).encode(), key))
+        
         tok = secrets.token_hex(32)
-        v['last_active'] = now
-        active_sessions[tok] = {'id': v['id'], 'name': v['name'], 'keys': v['keys'], 'path': v['path'], 'last_active': now}
-        return jsonify({'success': True, 'name': v['name'], 'session': tok})
+        active_sessions[tok] = {
+            'id': vault['id'], 'name': vault['name'],
+            'keys': vault['keys'], 'path': vault['path'],
+            'last_active': now
+        }
+        return jsonify({'success': True, 'name': vault['name'], 'session': tok})
+        
     except Exception as e:
-        return jsonify({'success': False, 'error': 'Ошибка открытия хранилища'})
+        logger.error(f"Vault error: {e}")
+        return jsonify({'success': False, 'error': 'Ошибка сервера'})
+
+
+
+#fixed
 
 def handle_list_files(data):
     tok = data.get('session'); path = data.get('path', '/')
